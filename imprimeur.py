@@ -36,8 +36,16 @@ def ajouter_imprimante_menu_contextuel(nom_imprimante):
         command_key = r"Software\Classes\SystemFileAssociations\.pdf\shell\ImprimerPDF\command"
 
         script_path = os.path.abspath(__file__)
-        python_executable = sys.executable
-        commande = f'"{python_executable}" "{script_path}" "%1" "{nom_imprimante}"'
+
+        # --------------------------
+        # FIX : commande différente si .exe
+        # --------------------------
+        if getattr(sys, 'frozen', False):
+            # On tourne en version compilée (PyInstaller)
+            commande = f'"{sys.executable}" "%1" "{nom_imprimante}"'
+        else:
+            # Version python normale
+            commande = f'"{sys.executable}" "{script_path}" "%1" "{nom_imprimante}"'
 
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, pdf_key) as key:
             winreg.SetValue(key, "", winreg.REG_SZ, f"Imprimer avec {nom_imprimante}")
@@ -52,25 +60,20 @@ def ajouter_imprimante_menu_contextuel(nom_imprimante):
 def supprimer_cle_recursive(cle_parent, sous_cle):
     """Supprime récursivement une clé de registre et toutes ses sous-clés."""
     try:
-        # Ouvrir la clé à supprimer
         cle = winreg.OpenKey(cle_parent, sous_cle, 0, winreg.KEY_ALL_ACCESS)
         
-        # Énumérer et supprimer toutes les sous-clés
         try:
             i = 0
             while True:
                 nom_sous_cle = winreg.EnumKey(cle, i)
                 supprimer_cle_recursive(cle, nom_sous_cle)
-                # Ne pas incrémenter i car la suppression décale les indices
         except OSError:
-            # Plus de sous-clés à énumérer
             pass
         
         winreg.CloseKey(cle)
-        # Supprimer la clé elle-même
         winreg.DeleteKey(cle_parent, sous_cle)
     except FileNotFoundError:
-        pass  # La clé n'existe pas
+        pass
     except Exception as e:
         raise e
 
@@ -79,7 +82,6 @@ def supprimer_imprimante_menu_contextuel():
     try:
         base_key = r"Software\Classes\SystemFileAssociations\.pdf\shell"
         
-        # Ouvrir la clé parente
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base_key, 0, winreg.KEY_ALL_ACCESS) as parent_key:
             supprimer_cle_recursive(parent_key, "ImprimerPDF")
         
@@ -145,9 +147,13 @@ def interface_graphique():
 
 if __name__ == "__main__":
     installer_dependances()
+
+    # Mode impression (depuis menu contextuel)
     if len(sys.argv) == 3:
         fichier_pdf = sys.argv[1]
         nom_imprimante = sys.argv[2]
         imprimer_pdf(fichier_pdf, nom_imprimante)
+
+    # Mode interface graphique
     else:
         interface_graphique()
